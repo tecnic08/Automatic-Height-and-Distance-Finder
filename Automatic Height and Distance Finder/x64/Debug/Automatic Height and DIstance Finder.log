@@ -1,0 +1,7 @@
+﻿  Source.cpp
+c:\users\tecnic08\documents\visual studio 2015\projects\automatic height and distance finder\automatic height and distance finder\source.cpp(57): warning C4305: '=': truncation from 'double' to 'float'
+c:\users\tecnic08\documents\visual studio 2015\projects\automatic height and distance finder\automatic height and distance finder\source.cpp(68): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data
+c:\users\tecnic08\documents\visual studio 2015\projects\automatic height and distance finder\automatic height and distance finder\source.cpp(182): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+c:\users\tecnic08\documents\visual studio 2015\projects\automatic height and distance finder\automatic height and distance finder\source.cpp(183): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+  Automatic Height and DIstance Finder.vcxproj -> c:\users\tecnic08\documents\visual studio 2015\Projects\Automatic Height and DIstance Finder\x64\Debug\Automatic Height and DIstance Finder.exe
+  Automatic Height and DIstance Finder.vcxproj -> c:\users\tecnic08\documents\visual studio 2015\Projects\Automatic Height and DIstance Finder\x64\Debug\Automatic Height and DIstance Finder.pdb (Full PDB)
