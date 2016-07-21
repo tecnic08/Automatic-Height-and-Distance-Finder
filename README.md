@@ -10,6 +10,9 @@ After that, make a right mouse click to calculate.
 Middle mouse to clear.
 
 Require
+
 Visual Studio 2015
+
 OpenCV 3.0+
+
 Camera
