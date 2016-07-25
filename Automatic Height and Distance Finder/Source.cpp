@@ -1,3 +1,6 @@
+/*Copyright Noppawit Lertutsahakul
+	This program will find height and distance of a defined point. Accuracy depends on the height of the object and curvature of the lens.
+*/
 #include "opencv2/video/tracking.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/highgui/highgui.hpp"
@@ -8,14 +11,37 @@
 using namespace cv;
 using namespace std;
 
+// Good Point border criteria
+int borderLeft = 220, borderRight = 420, borderLower = 210, borderUpper = 10;
+
+// Camera y pixel vs angle slope equation (Linear Equation) refer to excel file
+// [angle = Ay + B]
+float aConstant = -0.00305;
+float bConstant = 0.678;
+
+// deltaX is how far the camera has moved, cameraHeight is the hight of the camera from the ground
+float deltaX = 0.5;
+float cameraHeight = 0.32;
+float xDist, xDistC, height;
+
+// Distance Error Correction (Parabolic Equation) refer to excel file
+// [Error Percentage = cConstant y^2 + dConstant y +eConstant]
+// Turn this function on or off with the errorCompensation bool variable
+float cConstant = 0.0025;
+float dConstant = -0.6445;
+float eConstant = 45.775;
+bool errorCompensation = true;
+
+// Set the desired point grid 
+int desiredX[6] = { 160,224,288,352,416,480 };
+int desiredY[5] = { 60,100,140,180,200 };
+
+
 bool pointTrackingFlag = false;
 bool calculateTrackpointFlag = false;
 bool clearTrackingFlag = false;
 Point2f currentPoint;
 vector<Point2f> desiredPoint;
-
-// Good Point border criteria default is 160, 480, 240
-int borderLeft = 220, borderRight = 420, borderLower = 240, borderHigh = 10;
 
 // Detect mouse events
 void onMouse(int event, int x, int y, int, void*)
@@ -44,21 +70,13 @@ int main(int argc, char* argv[])
 {
 	// Open camera
 	VideoCapture cap(0);
-	// Check if the camera is open yet
+
+	// Check whether the camera is open yet
 	if (!cap.isOpened())
 	{
 		cerr << "Unable to open the webcam." << endl;
 		return -1;
 	}
-
-	// Height and distace calculation variable
-	float xDist, height, cameraHeight, deltaX;
-	deltaX = 0.5;
-	cameraHeight = 0.32;
-
-	// Set the desired point grid 
-	int desiredX[6] = {160,224,288,352,416,480};
-	int desiredY[5] = {60,100,140,180,220};
 
 	// Push desired (x,y) in vector of desiredPoint
 	for (int i = 0; i < 6; i++)
@@ -133,13 +151,13 @@ int main(int argc, char* argv[])
 					}
 				}
 
-				// Check if the status vector is good
+				// Check if the status vector is good if not, skip the code below
 				if (!statusVector[i])
 					continue;
 				// Remove tracking point that is out of ROI
 				if (trackingPoints[1][i].x < borderLeft || trackingPoints[1][i].x > borderRight)
 					continue;
-				if (trackingPoints[1][i].y < borderHigh || trackingPoints[1][i].y > borderLower)
+				if (trackingPoints[1][i].y < borderUpper || trackingPoints[1][i].y > borderLower)
 					continue;
 
 				// Point optimization (removed)
@@ -150,46 +168,78 @@ int main(int argc, char* argv[])
 				int thickness = 2;
 				int lineType = 3;
 				circle(image, trackingPoints[1][i], radius, Scalar(0, 255, 0), thickness, lineType);
+				
+				// Show point number in frame
 				bufferstring.str("");
 				bufferstring << i;
 				gg = bufferstring.str();
-				cv::putText(image, gg, trackingPoints[1][i], CV_FONT_NORMAL, 0.6, Scalar(0, 255, 0), 1, 1);
+				cv::putText(image, gg, Point(trackingPoints[1][i].x + 5,trackingPoints[1][i].y + 5), CV_FONT_NORMAL, 0.6, Scalar(0, 255, 0), 1, 1);
+
+				// Add goodPoints count and save the point index in goodPointsVec for calculation
 				goodPoints++;
 				goodPointsVec.push_back(i);
 
 			}
+
 			// Point optimization (removed)
 			//trackingPoints[1].resize(count);
 
 			// Reset grid if there are too little point
 			/*if (goodPoints <= 4)
 			{
-				clearTrackingFlag = true;
-				pointTrackingFlag = true;
-				cout << "Tracking grid reset" << endl;
+			clearTrackingFlag = true;
+			pointTrackingFlag = true;
+			cout << "Tracking grid reset" << endl;
 			}*/
-
+			
+			// Transfer local vector variable to global vector variable
 			goodPointsVecTransfer = goodPointsVec;
 		}
 
 		// Calculate the distance
 		if (calculateTrackpointFlag)
 		{
+			// Set float point decimal point
+			std::cout.setf(std::ios_base::fixed, std::ios_base::floatfield);
+			std::cout.precision(2);
+
 			for (int i = 0; i < goodPointsVecTransfer.size(); i++)
 			{
-				xDist = (tan(-0.00305*calculatePoints[0][goodPointsVecTransfer[i]].y + 0.678)*deltaX)
-					/ (tan(-0.00305*trackingPoints[1][goodPointsVecTransfer[i]].y + 0.678)
-						- tan(-0.00305*calculatePoints[0][goodPointsVecTransfer[i]].y + 0.678));
-				height = xDist*tan(-0.00305*trackingPoints[1][goodPointsVecTransfer[i]].y + 0.678) + cameraHeight;
-
-				if (xDist >= 15)
-					cout << "Point " << goodPointsVecTransfer[i] << " too far." << endl;
-				else if (xDist < 0)
-					cout << "Point " << goodPointsVecTransfer[i] << " cannot be calculated." << endl;
+				// xDist calculation (How far is it from the object)
+				xDist = (tan(aConstant*calculatePoints[0][goodPointsVecTransfer[i]].y + bConstant)*deltaX)
+					/ (tan(aConstant*trackingPoints[1][goodPointsVecTransfer[i]].y + bConstant)
+						- tan(aConstant*calculatePoints[0][goodPointsVecTransfer[i]].y + bConstant));
+				
+				// height calculation (How high is the object)
+				height = xDist*tan(aConstant*trackingPoints[1][goodPointsVecTransfer[i]].y + bConstant) + cameraHeight;
+				
+				if (errorCompensation)
+				{
+					// xDist error compensation 
+					xDistC = xDist - abs((xDist*(((cConstant*calculatePoints[0][goodPointsVecTransfer[i]].y*calculatePoints[0][goodPointsVecTransfer[i]].y)
+						+ (dConstant*calculatePoints[0][goodPointsVecTransfer[i]].y) + eConstant) / 100)));
+				}
+				
+				if (xDist < 0 || xDist >= 15)
+					cout << "Point " << goodPointsVecTransfer[i] << "(" << calculatePoints[0][goodPointsVecTransfer[i]].x << "," 
+					<< calculatePoints[0][goodPointsVecTransfer[i]].y << ") "<< " cannot be calculated." << endl;
 				else
-					cout << "Point " << goodPointsVecTransfer[i] << ", height is " << height << "m and it is " << xDist << "m away." << endl;
+				{
+					if (errorCompensation)
+					{
+						cout << "Point " << goodPointsVecTransfer[i] << "(" << calculatePoints[0][goodPointsVecTransfer[i]].x << ","
+							<< calculatePoints[0][goodPointsVecTransfer[i]].y << ") height is " << height << "m and it is " << xDistC << "m (" << xDist << "m ) away." << endl;
+					}
+					else
+					{
+						cout << "Point " << goodPointsVecTransfer[i] << "(" << calculatePoints[0][goodPointsVecTransfer[i]].x << ","
+							<< calculatePoints[0][goodPointsVecTransfer[i]].y << ") height is " << height << "m and it is " << xDist << "m  away." << endl;
+					}
+				}
 			}
+			// Add blank line tos separate each iteration
 			cout << endl;
+
 			calculateTrackpointFlag = false;
 		}
 
@@ -214,7 +264,7 @@ int main(int argc, char* argv[])
 				tempPoints.push_back(desiredPoint[k]);
 
 				cornerSubPix(curGrayImage, tempPoints, windowSize, cvSize(-1, -1), terminationCriteria);
-				
+
 				// Add point for calculation
 				calculatePoints[0].push_back(tempPoints[0]);
 				trackingPoints[1].push_back(tempPoints[0]);
