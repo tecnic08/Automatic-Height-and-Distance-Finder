@@ -1,5 +1,19 @@
 /*Copyright Noppawit Lertutsahakul
 	This program will find height and distance of a defined point. Accuracy depends on the height of the object and curvature of the lens.
+	
+	+++ Memo of things to do +++
+	- Make this code runs on Ubuntu
+	- Make ROS node that publish odometry data and connnect it with this code.
+	- Make this code autonomous
+		- Automatically deploy a grid
+		- If the point has been moved for more than some pixel (ex. 50)
+		  then return it to the original point (Not sure if this is a good idea)
+		- Or if the point moved for more than some pixel, add a new point to that black point.
+		- Other idea
+		- Vector of former tracking point must also contain location data not only point.
+		- After sometime, tracking point vector will be very large, it needs to be cleared.
+	- Test this code on the onboard computer of Kenaf
+
 */
 #include "opencv2/video/tracking.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
