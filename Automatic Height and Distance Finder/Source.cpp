@@ -1,6 +1,6 @@
 /*Copyright Noppawit Lertutsahakul
 	This program will find height and distance of a defined point. Accuracy depends on the height of the object and curvature of the lens.
-	
+
 	+++ Memo of things to do +++
 	- Make this code runs on Ubuntu
 	- Make ROS node that publish odometry data and connnect it with this code.
@@ -26,7 +26,7 @@ using namespace cv;
 using namespace std;
 
 // Good Point border criteria
-int borderLeft = 220, borderRight = 420, borderLower = 210, borderUpper = 10;
+int borderLeft = 120, borderRight = 520, borderLower = 210, borderUpper = 10;
 
 // Camera y pixel vs angle slope equation (Linear Equation) refer to excel file
 // [angle = Ay + B]
@@ -46,16 +46,22 @@ float dConstant = -0.6445;
 float eConstant = 45.775;
 bool errorCompensation = true;
 
-// Set the desired point grid 
-int desiredX[6] = { 160,224,288,352,416,480 };
+// Set the desired point grid
+// For 640x480
+int desiredX[9] = { 160,200,240,280,320,360,400,440,480 };
 int desiredY[5] = { 60,100,140,180,200 };
 
 
+// Declaring some flags
 bool pointTrackingFlag = false;
 bool calculateTrackpointFlag = false;
 bool clearTrackingFlag = false;
+bool recenterOffGridPoint = false;
+
 Point2f currentPoint;
 vector<Point2f> desiredPoint;
+
+int pointNeedsRecenter;
 
 // Detect mouse events
 void onMouse(int event, int x, int y, int, void*)
@@ -83,7 +89,7 @@ void onMouse(int event, int x, int y, int, void*)
 int main(int argc, char* argv[])
 {
 	// Open camera
-	VideoCapture cap(0);
+	VideoCapture cap(1);
 
 	// Check whether the camera is open yet
 	if (!cap.isOpened())
@@ -93,7 +99,7 @@ int main(int argc, char* argv[])
 	}
 
 	// Push desired (x,y) in vector of desiredPoint
-	for (int i = 0; i < 6; i++)
+	for (int i = 0; i < 9; i++)
 	{
 		for (int j = 0; j < 5; j++)
 		{
@@ -114,7 +120,9 @@ int main(int argc, char* argv[])
 	setMouseCallback(windowName, onMouse, 0);
 
 	Mat prevGrayImage, curGrayImage, image, frame;
+	// trackingPoints is the current point.
 	vector<Point2f> trackingPoints[2];
+	// calculatePoints is the previous point data that will be used for calculation
 	vector<Point2f> calculatePoints[2];
 	vector<int> goodPointsVecTransfer;
 
@@ -167,12 +175,24 @@ int main(int argc, char* argv[])
 
 				// Check if the status vector is good if not, skip the code below
 				if (!statusVector[i])
+				{
+                    recenterOffGridPoint = true;
+                    pointNeedsRecenter = i;
 					continue;
+                }
 				// Remove tracking point that is out of ROI
 				if (trackingPoints[1][i].x < borderLeft || trackingPoints[1][i].x > borderRight)
+				{
+                    recenterOffGridPoint = true;
+                    pointNeedsRecenter = i;
 					continue;
+                }
 				if (trackingPoints[1][i].y < borderUpper || trackingPoints[1][i].y > borderLower)
+                {
+                    recenterOffGridPoint = true;
+                    pointNeedsRecenter = i;
 					continue;
+                }
 
 				// Point optimization (removed)
 				//trackingPoints[1][count++] = trackingPoints[1][i];
@@ -182,7 +202,7 @@ int main(int argc, char* argv[])
 				int thickness = 2;
 				int lineType = 3;
 				circle(image, trackingPoints[1][i], radius, Scalar(0, 255, 0), thickness, lineType);
-				
+
 				// Show point number in frame
 				bufferstring.str("");
 				bufferstring << i;
@@ -205,7 +225,7 @@ int main(int argc, char* argv[])
 			pointTrackingFlag = true;
 			cout << "Tracking grid reset" << endl;
 			}*/
-			
+
 			// Transfer local vector variable to global vector variable
 			goodPointsVecTransfer = goodPointsVec;
 		}
@@ -223,19 +243,19 @@ int main(int argc, char* argv[])
 				xDist = (tan(aConstant*calculatePoints[0][goodPointsVecTransfer[i]].y + bConstant)*deltaX)
 					/ (tan(aConstant*trackingPoints[1][goodPointsVecTransfer[i]].y + bConstant)
 						- tan(aConstant*calculatePoints[0][goodPointsVecTransfer[i]].y + bConstant));
-				
+
 				// height calculation (How high is the object)
 				height = xDist*tan(aConstant*trackingPoints[1][goodPointsVecTransfer[i]].y + bConstant) + cameraHeight;
-				
+
 				if (errorCompensation)
 				{
-					// xDist error compensation 
+					// xDist error compensation
 					xDistC = xDist - abs((xDist*(((cConstant*calculatePoints[0][goodPointsVecTransfer[i]].y*calculatePoints[0][goodPointsVecTransfer[i]].y)
 						+ (dConstant*calculatePoints[0][goodPointsVecTransfer[i]].y) + eConstant) / 100)));
 				}
-				
+
 				if (xDist < 0 || xDist >= 15)
-					cout << "Point " << goodPointsVecTransfer[i] << "(" << calculatePoints[0][goodPointsVecTransfer[i]].x << "," 
+					cout << "Point " << goodPointsVecTransfer[i] << "(" << calculatePoints[0][goodPointsVecTransfer[i]].x << ","
 					<< calculatePoints[0][goodPointsVecTransfer[i]].y << ") "<< " cannot be calculated." << endl;
 				else
 				{
@@ -260,6 +280,9 @@ int main(int argc, char* argv[])
 		// Reset the tracking point
 		if (clearTrackingFlag)
 		{
+            // Turn off recentering otherwise segmentation fault will occur
+            recenterOffGridPoint = false;
+
 			trackingPoints[0].clear();
 			trackingPoints[1].clear();
 			calculatePoints[0].clear();
@@ -279,13 +302,35 @@ int main(int argc, char* argv[])
 
 				cornerSubPix(curGrayImage, tempPoints, windowSize, cvSize(-1, -1), terminationCriteria);
 
-				// Add point for calculation
+				// Add point for calculation.
 				calculatePoints[0].push_back(tempPoints[0]);
 				trackingPoints[1].push_back(tempPoints[0]);
 			}
 
 			pointTrackingFlag = false;
 		}
+
+		// Tracking point is bad or moved away from border, reset that point.
+		if (recenterOffGridPoint)
+		{
+            vector<Point2f> tempPoints;
+            tempPoints.push_back(desiredPoint[pointNeedsRecenter]);
+
+            cornerSubPix(curGrayImage, tempPoints, windowSize, cvSize(-1, -1), terminationCriteria);
+
+            // Remove old, bad tracking point from the vector.
+            calculatePoints[0].erase(calculatePoints[0].begin()+pointNeedsRecenter);
+            trackingPoints[1].erase(trackingPoints[1].begin()+pointNeedsRecenter);
+
+            // Insert new tracking point into the vector.
+            calculatePoints[0].insert(calculatePoints[0].begin()+pointNeedsRecenter, tempPoints[0]);
+            trackingPoints[1].insert(trackingPoints[1].begin()+pointNeedsRecenter, tempPoints[0]);
+
+            cout << "Point recentered " << pointNeedsRecenter << endl;
+
+            recenterOffGridPoint = false;
+		}
+
 
 		imshow(windowName, image);
 
