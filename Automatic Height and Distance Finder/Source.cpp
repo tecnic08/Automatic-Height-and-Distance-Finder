@@ -21,9 +21,18 @@
 
 #include <iostream>
 #include <math.h>
+// For simulating robot movement
+#include <time.h>
 
 using namespace cv;
 using namespace std;
+
+// For simulating robot movement
+clock_t thisTime = clock();
+clock_t lastTime = thisTime;
+double timeCounter = 0;
+const int NUM_SECONDS = 1;
+
 
 // Good Point border criteria
 int borderLeft = 120, borderRight = 520, borderLower = 210, borderUpper = 10;
@@ -34,9 +43,11 @@ float aConstant = -0.00305;
 float bConstant = 0.678;
 
 // deltaX is how far the camera has moved, cameraHeight is the hight of the camera from the ground
-float deltaX = 0.5;
+float deltaX;
+float currentX = 0;
 float cameraHeight = 0.32;
 float xDist, xDistC, height;
+vector<float> locationOfInitiation;
 
 // Distance Error Correction (Parabolic Equation) refer to excel file
 // [Error Percentage = cConstant y^2 + dConstant y +eConstant]
@@ -61,7 +72,7 @@ bool recenterOffGridPoint = false;
 Point2f currentPoint;
 vector<Point2f> desiredPoint;
 
-int pointNeedsRecenter;
+vector<int> pointNeedsRecenter;
 
 // Detect mouse events
 void onMouse(int event, int x, int y, int, void*)
@@ -89,7 +100,7 @@ void onMouse(int event, int x, int y, int, void*)
 int main(int argc, char* argv[])
 {
 	// Open camera
-	VideoCapture cap(1);
+	VideoCapture cap(0);
 
 	// Check whether the camera is open yet
 	if (!cap.isOpened())
@@ -129,6 +140,7 @@ int main(int argc, char* argv[])
 	// Image size scaling factor
 	float scalingFactor = 1.0;
 
+	// Main loop
 	while (true)
 	{
 		cap >> frame;
@@ -141,6 +153,20 @@ int main(int argc, char* argv[])
 		frame.copyTo(image);
 
 		cvtColor(image, curGrayImage, COLOR_BGR2GRAY);
+
+		// For simulating robot movement
+		thisTime = clock();
+		timeCounter += (double)(thisTime - lastTime);
+		lastTime = thisTime;
+		if (timeCounter > (double)(NUM_SECONDS * CLOCKS_PER_SEC))
+		{
+			timeCounter -= (double)(NUM_SECONDS * CLOCKS_PER_SEC);
+			// Simulating movement of 0.1 m/s
+			currentX += 0.1;
+		}
+
+		//cout << currentX << endl;
+
 
 		if (!trackingPoints[0].empty())
 		{
@@ -177,20 +203,20 @@ int main(int argc, char* argv[])
 				if (!statusVector[i])
 				{
                     recenterOffGridPoint = true;
-                    pointNeedsRecenter = i;
+                    pointNeedsRecenter.push_back(i);
 					continue;
                 }
 				// Remove tracking point that is out of ROI
 				if (trackingPoints[1][i].x < borderLeft || trackingPoints[1][i].x > borderRight)
 				{
                     recenterOffGridPoint = true;
-                    pointNeedsRecenter = i;
+                    pointNeedsRecenter.push_back(i);
 					continue;
                 }
 				if (trackingPoints[1][i].y < borderUpper || trackingPoints[1][i].y > borderLower)
                 {
                     recenterOffGridPoint = true;
-                    pointNeedsRecenter = i;
+                    pointNeedsRecenter.push_back(i);
 					continue;
                 }
 
@@ -207,7 +233,7 @@ int main(int argc, char* argv[])
 				bufferstring.str("");
 				bufferstring << i;
 				gg = bufferstring.str();
-				cv::putText(image, gg, Point(trackingPoints[1][i].x + 5,trackingPoints[1][i].y + 5), CV_FONT_NORMAL, 0.6, Scalar(0, 255, 0), 1, 1);
+				cv::putText(image, gg, Point(trackingPoints[1][i].x + 10,trackingPoints[1][i].y + 10), CV_FONT_NORMAL, 0.5, Scalar(0, 0, 255), 1, 1);
 
 				// Add goodPoints count and save the point index in goodPointsVec for calculation
 				goodPoints++;
@@ -239,40 +265,47 @@ int main(int argc, char* argv[])
 
 			for (int i = 0; i < goodPointsVecTransfer.size(); i++)
 			{
-				// xDist calculation (How far is it from the object)
-				xDist = (tan(aConstant*calculatePoints[0][goodPointsVecTransfer[i]].y + bConstant)*deltaX)
-					/ (tan(aConstant*trackingPoints[1][goodPointsVecTransfer[i]].y + bConstant)
-						- tan(aConstant*calculatePoints[0][goodPointsVecTransfer[i]].y + bConstant));
-
-				// height calculation (How high is the object)
-				height = xDist*tan(aConstant*trackingPoints[1][goodPointsVecTransfer[i]].y + bConstant) + cameraHeight;
-
-				if (errorCompensation)
+				// Get deltaX to know how much the robot moves for this point.
+				deltaX = currentX - locationOfInitiation[goodPointsVecTransfer[i]];
+				if (deltaX > 0.5)
 				{
-					// xDist error compensation
-					xDistC = xDist - abs((xDist*(((cConstant*calculatePoints[0][goodPointsVecTransfer[i]].y*calculatePoints[0][goodPointsVecTransfer[i]].y)
-						+ (dConstant*calculatePoints[0][goodPointsVecTransfer[i]].y) + eConstant) / 100)));
-				}
+					// xDist calculation (How far is it from the object)
+					xDist = (tan(aConstant*calculatePoints[0][goodPointsVecTransfer[i]].y + bConstant)*deltaX)
+						/ (tan(aConstant*trackingPoints[1][goodPointsVecTransfer[i]].y + bConstant)
+							- tan(aConstant*calculatePoints[0][goodPointsVecTransfer[i]].y + bConstant));
 
-				if (xDist < 0 || xDist >= 15)
-					cout << "Point " << goodPointsVecTransfer[i] << "(" << calculatePoints[0][goodPointsVecTransfer[i]].x << ","
-					<< calculatePoints[0][goodPointsVecTransfer[i]].y << ") "<< " cannot be calculated." << endl;
-				else
-				{
+					// height calculation (How high is the object)
+					height = xDist*tan(aConstant*trackingPoints[1][goodPointsVecTransfer[i]].y + bConstant) + cameraHeight;
+
 					if (errorCompensation)
 					{
-						cout << "Point " << goodPointsVecTransfer[i] << "(" << calculatePoints[0][goodPointsVecTransfer[i]].x << ","
-							<< calculatePoints[0][goodPointsVecTransfer[i]].y << ") height is " << height << "m and it is " << xDistC << "m (" << xDist << "m ) away." << endl;
+						// xDist error compensation
+						xDistC = xDist - abs((xDist*(((cConstant*calculatePoints[0][goodPointsVecTransfer[i]].y*calculatePoints[0][goodPointsVecTransfer[i]].y)
+							+ (dConstant*calculatePoints[0][goodPointsVecTransfer[i]].y) + eConstant) / 100)));
 					}
+
+					// Print out the distance and height
+					if (xDist < 0 || xDist >= 15)
+						cout << "Point " << goodPointsVecTransfer[i] << "(" << calculatePoints[0][goodPointsVecTransfer[i]].x << ","
+						<< calculatePoints[0][goodPointsVecTransfer[i]].y << ") " << " cannot be calculated. DeltaX is " << deltaX << endl;
 					else
 					{
-						cout << "Point " << goodPointsVecTransfer[i] << "(" << calculatePoints[0][goodPointsVecTransfer[i]].x << ","
-							<< calculatePoints[0][goodPointsVecTransfer[i]].y << ") height is " << height << "m and it is " << xDist << "m  away." << endl;
+						if (errorCompensation)
+						{
+							cout << "Point " << goodPointsVecTransfer[i] << "(" << calculatePoints[0][goodPointsVecTransfer[i]].x << ","
+								<< calculatePoints[0][goodPointsVecTransfer[i]].y << ") height is " << height << "m and it is " << xDistC << "m (" << xDist << "m ) away. DeltaX is " << deltaX << endl;
+						}
+						else
+						{
+							cout << "Point " << goodPointsVecTransfer[i] << "(" << calculatePoints[0][goodPointsVecTransfer[i]].x << ","
+								<< calculatePoints[0][goodPointsVecTransfer[i]].y << ") height is " << height << "m and it is " << xDist << "m  away. DeltaX is " << deltaX << endl;
+						}
 					}
 				}
 			}
-			// Add blank line tos separate each iteration
+			// Add blank line to separate each iteration
 			cout << endl;
+
 
 			calculateTrackpointFlag = false;
 		}
@@ -305,6 +338,7 @@ int main(int argc, char* argv[])
 				// Add point for calculation.
 				calculatePoints[0].push_back(tempPoints[0]);
 				trackingPoints[1].push_back(tempPoints[0]);
+				locationOfInitiation.push_back(currentX);
 			}
 
 			pointTrackingFlag = false;
@@ -313,21 +347,32 @@ int main(int argc, char* argv[])
 		// Tracking point is bad or moved away from border, reset that point.
 		if (recenterOffGridPoint)
 		{
-            vector<Point2f> tempPoints;
-            tempPoints.push_back(desiredPoint[pointNeedsRecenter]);
+			cout << "Point recenter ";
+			for (int k = 0; k < pointNeedsRecenter.size(); k++)
+			{
+				vector<Point2f> tempPoints;
+				tempPoints.push_back(desiredPoint[pointNeedsRecenter[k]]);
 
-            cornerSubPix(curGrayImage, tempPoints, windowSize, cvSize(-1, -1), terminationCriteria);
+				cornerSubPix(curGrayImage, tempPoints, windowSize, cvSize(-1, -1), terminationCriteria);
 
-            // Remove old, bad tracking point from the vector.
-            calculatePoints[0].erase(calculatePoints[0].begin()+pointNeedsRecenter);
-            trackingPoints[1].erase(trackingPoints[1].begin()+pointNeedsRecenter);
+				// Remove old, bad tracking point from the vector.
+				calculatePoints[0].erase(calculatePoints[0].begin() + pointNeedsRecenter[k]);
+				trackingPoints[1].erase(trackingPoints[1].begin() + pointNeedsRecenter[k]);
+				locationOfInitiation.erase(locationOfInitiation.begin() + pointNeedsRecenter[k]);
 
-            // Insert new tracking point into the vector.
-            calculatePoints[0].insert(calculatePoints[0].begin()+pointNeedsRecenter, tempPoints[0]);
-            trackingPoints[1].insert(trackingPoints[1].begin()+pointNeedsRecenter, tempPoints[0]);
+				// Insert new tracking point into the vector.
+				calculatePoints[0].insert(calculatePoints[0].begin() + pointNeedsRecenter[k], tempPoints[0]);
+				trackingPoints[1].insert(trackingPoints[1].begin() + pointNeedsRecenter[k], tempPoints[0]);
+				locationOfInitiation.insert(locationOfInitiation.begin() + pointNeedsRecenter[k], currentX);
 
-            cout << "Point recentered " << pointNeedsRecenter << endl;
-
+				cout << pointNeedsRecenter[k] << " ";
+				// Presumed the point is recentered and can be cleared. If not, it will be fed back by main function.
+				pointNeedsRecenter.erase(pointNeedsRecenter.begin() + k);
+			}
+			
+			cout << endl;
+			
+			if (pointNeedsRecenter.empty())
             recenterOffGridPoint = false;
 		}
 
