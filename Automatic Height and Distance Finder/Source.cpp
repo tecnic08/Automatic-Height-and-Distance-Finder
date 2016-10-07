@@ -64,7 +64,7 @@ int desiredY[5] = { 60,100,140,180,200 };
 
 
 // Declaring some flags
-bool pointTrackingFlag = false;
+bool pointTrackingFlag = true;
 bool calculateTrackpointFlag = false;
 bool clearTrackingFlag = false;
 bool recenterOffGridPoint = false;
