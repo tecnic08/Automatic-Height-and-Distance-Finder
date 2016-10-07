@@ -71,8 +71,28 @@ bool recenterOffGridPoint = false;
 
 Point2f currentPoint;
 vector<Point2f> desiredPoint;
-
 vector<int> pointNeedsRecenter;
+
+// UI Button Callback Function
+void setpointTrackingFlag(int state, void*)
+{
+	pointTrackingFlag = true;
+}
+
+void setcalculateTrackpointFlag(int state, void*)
+{
+	calculateTrackpointFlag = true;
+}
+
+void setclearTrackingFlag(int state, void*)
+{
+	clearTrackingFlag = true;
+}
+
+void setrecenterOffGridPoint(int state, void*)
+{
+	recenterOffGridPoint = true;
+}
 
 // Detect mouse events
 void onMouse(int event, int x, int y, int, void*)
@@ -109,6 +129,13 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
+	// Window for value reporting TOO FAST
+	/*
+	Mat bgimage, bgimage2;
+    bgimage = imread("black.png", CV_LOAD_IMAGE_COLOR);
+    namedWindow("Status Report", 1);
+    */
+
 	// Push desired (x,y) in vector of desiredPoint
 	for (int i = 0; i < 9; i++)
 	{
@@ -129,6 +156,12 @@ int main(int argc, char* argv[])
 	string windowName = "Height and Range finder";
 	namedWindow(windowName, 1);
 	setMouseCallback(windowName, onMouse, 0);
+
+    // Setting and report UI
+	createButton("Deploy Track Point", setpointTrackingFlag, NULL, CV_PUSH_BUTTON);
+	createButton("Clear Track Point", setclearTrackingFlag, NULL, CV_PUSH_BUTTON);
+	createButton("Calculate Distance", setcalculateTrackpointFlag, NULL, CV_PUSH_BUTTON);
+
 
 	Mat prevGrayImage, curGrayImage, image, frame;
 	// trackingPoints is the current point.
@@ -151,6 +184,8 @@ int main(int argc, char* argv[])
 		resize(frame, frame, Size(), scalingFactor, scalingFactor, INTER_AREA);
 
 		frame.copyTo(image);
+
+		//bgimage.copyTo(bgimage2); FOR UI Reporting, but too fast
 
 		cvtColor(image, curGrayImage, COLOR_BGR2GRAY);
 
@@ -284,6 +319,15 @@ int main(int argc, char* argv[])
 							+ (dConstant*calculatePoints[0][goodPointsVecTransfer[i]].y) + eConstant) / 100)));
 					}
 
+					// Result output UI
+					/*
+					stringstream bufferstring;
+                    string gg;
+                    bufferstring << "Point " << i << " Distance: " << xDistC << " Height: " << height;
+                    gg = bufferstring.str();
+                    cv::putText(bgimage2, gg, Point(50,(20+10*i)), CV_FONT_NORMAL, 0.4, Scalar(0, 255, 0), 1, 1);
+                    */
+
 					// Print out the distance and height
 					if (xDist < 0 || xDist >= 15)
 						cout << "Point " << goodPointsVecTransfer[i] << "(" << calculatePoints[0][goodPointsVecTransfer[i]].x << ","
@@ -305,6 +349,7 @@ int main(int argc, char* argv[])
 			}
 			// Add blank line to separate each iteration
 			cout << endl;
+
 
 
 			calculateTrackpointFlag = false;
@@ -369,15 +414,17 @@ int main(int argc, char* argv[])
 				// Presumed the point is recentered and can be cleared. If not, it will be fed back by main function.
 				pointNeedsRecenter.erase(pointNeedsRecenter.begin() + k);
 			}
-			
+
 			cout << endl;
-			
+
 			if (pointNeedsRecenter.empty())
             recenterOffGridPoint = false;
 		}
 
-
 		imshow(windowName, image);
+
+		// Window for value reporting TOO FAST
+		//imshow("Status Report",bgimage2);
 
 		// ESC Check
 		char ch = waitKey(10);
