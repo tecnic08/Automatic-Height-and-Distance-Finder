@@ -1,7 +1,5 @@
 # Automatic-Height-and-Distance-Finder
 Initial Upload 21 July 16
-*NOW OBSOLETE -> MOVED TO ROS VERSION
-
 
 This will calculate the height and distace of the object in the frame that is being tracked.
 

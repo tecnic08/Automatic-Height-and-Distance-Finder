@@ -369,9 +369,9 @@ int main(int argc, char* argv[])
 				// Presumed the point is recentered and can be cleared. If not, it will be fed back by main function.
 				pointNeedsRecenter.erase(pointNeedsRecenter.begin() + k);
 			}
-			
+
 			cout << endl;
-			
+
 			if (pointNeedsRecenter.empty())
             recenterOffGridPoint = false;
 		}
